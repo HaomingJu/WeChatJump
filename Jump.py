@@ -221,12 +221,10 @@ class WeChatJumpGame:
     
 
 if __name__ == "__main__":
+    if len(sys.argv) == 2:
+        k = float(sys.argv[1])
+    else:
+        k = 1.25
     obj = WeChatJumpGame()
-    
-    # obj.setImage("./result/1/50.png")
-    # [x, y] = obj.findEnd()
-    # obj.drawCircle(x, y)
-    # obj.showImage()
-    
-    obj.setK(1.25)
+    obj.setK(k)
     obj.Run()
