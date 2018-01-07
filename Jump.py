@@ -21,6 +21,13 @@ class WeChatJumpGame:
         self.m_img_w = -1
         self.img_rgb = None
         self.img_gray = None
+        self.line_0 = 0
+        self.line_1 = 0
+        self.x1 = 0
+        self.y1 = 0
+        self.x2 = 0
+        self.y2 = 0
+        self.body_w = 76                # 小棋子宽度
         self.getScreenWH()
         self.rebootTimes = 0
         self.tryTimes = 0
@@ -36,7 +43,7 @@ class WeChatJumpGame:
                 self.touchRebootButton()                                            # 按下重新开始键
                 continue                                                           # 直接进入下一个循环
             self.touchScreen(-1, -1, -1, -1, int(self.k * self.parseImage()))       # 分析图片，然后在一个随机位置按下特定时间
-            time.sleep(random.uniform(2, 3.5))                                      # 暂停<随机数> 时间
+            time.sleep(random.uniform(1, 2))                                      # 暂停<随机数> 时间
 
     # private:
     def getScreenWH(self):
@@ -51,6 +58,8 @@ class WeChatJumpGame:
                 self.m_img_h = int(match.group("h"))
                 logging.debug("Phone (w) = " + str(self.m_img_w) + " (h) = " + str(self.m_img_h))
                 break
+        self.line_0 = int(self.m_img_h * 17 / 96)
+        self.line_1 = int(self.m_img_h * 39 / 48)
         return [self.m_img_w, self.m_img_h]
 
     def getScreenImage(self):
@@ -88,17 +97,18 @@ class WeChatJumpGame:
     def touchRebootButton(self):
         logging.debug("touch reboot button")
         self.rebootTimes = self.rebootTimes + 1
+        self.tryTimes = 0
         X1 = X2 = int(self.m_img_w / 2)
-        Y1 = Y2 = int(self.m_img_h * 39 / 48)
+        Y1 = Y2 = self.line_1
         self.touchScreen(X1, Y1, X2, Y2, 10) # TODO 确定X1, Y1, X2, Y2
         time.sleep(random.uniform(3, 4))
 
     def touchScreen(self, x1_, y1_, x2_, y2_, during_):
         if x1_ == y1_ == x2_ == y2_ == -1:                                # 如果均为-1，则为随机数
-            x1_ = int(random.uniform(0, self.m_img_w))
-            y1_ = int(random.uniform(0, self.m_img_h))
-            x2_ = int(random.uniform(0, self.m_img_w))
-            y2_ = int(random.uniform(0, self.m_img_h))
+            x1_ = int(random.uniform(self.m_img_w /2 - 10, self.m_img_w /2 + 10))
+            y1_ = int(random.uniform(self.line_1 - 10, self.line_1 + 10))
+            x2_ = int(random.uniform(self.m_img_w /2 - 10, self.m_img_w /2 + 10))
+            y2_ = int(random.uniform(self.line_1 - 10, self.line_1 + 10))
         cmd_touchscreen = 'adb shell input swipe {x1} {y1} {x2} {y2} {duration}'.format(
             x1=x1_,
             y1=y1_,
@@ -115,17 +125,108 @@ class WeChatJumpGame:
 
     # 对图片进行分析
     def parseImage(self):
-        # TODO 分析图片，
         distance = 0
-        return distance # 返回两点图像间距离
+        start_ = self.findStart()
+        end_ = self.findEnd()
+        return self.calDistance(start_, end_)     # 返回两点图像间距离
+
+    # 找到起点
+    def findStart(self):
+        _0 = []
+        _1 = []
+        _2 = []
+        for i in range(self.line_1, self.line_0, -3):
+            for j in range(0, self.m_img_w - 50):
+                Sum_0 = 0
+                Sum_1 = 0
+                Sum_2 = 0
+                length = 20
+                for n in range(0, length, 1):
+                    Sum_0 = Sum_0 + self.img_rgb[i][j+n][0]
+                    Sum_1 = Sum_1 + self.img_rgb[i][j+n][1]
+                    Sum_2 = Sum_2 + self.img_rgb[i][j+n][2]
+                Sum_0 = int(Sum_0 / length)
+                Sum_1 = int(Sum_1 / length)
+                Sum_2 = int(Sum_2 / length)
+                if (95 <= Sum_0 <= 105) and (50 <= Sum_1 <= 60) and (50 <=Sum_2 <= 60):
+                    logging.info("find start: ({x}, {y})".format(x=j+20, y=i))
+                    self.x1 = j+20
+                    self.y1 = i
+                    return [self.x1, self.y1]
+        self.x1 = 0
+        self.y1 = 0
+        return [0,0]
+            
+    # 找到终点
+    def findEnd(self):
+        self.drawBK()
+        for i in range(self.line_0, self.line_1, 3):
+            for j in range(0, self.m_img_w - 50, 2):
+                Sum_0 = 0
+                Sum_1 = 0
+                length = 4
+                for n in range(0, length, 1):
+                    Sum_0 = Sum_0 + self.img_rgb[i][j+n][0] + self.img_rgb[i][j+n][1] + self.img_rgb[i][j+n][2]
+                    Sum_1 = Sum_1 + self.img_rgb[i][j+n+length][0] + self.img_rgb[i][j+n+length][1] + self.img_rgb[i][j+n+length][2]
+                    Sum_0 = Sum_0 / length
+                    Sum_1 = Sum_1 / length
+                if ((abs(Sum_1 - Sum_0) > 30) or (Sum_1 >= 243)) and (abs(j - self.x1) > self.body_w):
+                    logging.info("find end: ({x}, {y})".format(x=j+20, y=i))
+                    self.x2 = j+20
+                    self.y2 = i
+                    return [j+20, i]
+        self.x2 = 0
+        self.y2 = 0
+        return [0, 0]
+    
+    def drawBK(self):
+        Sum_bk = 0
+        for j in range(0, self.m_img_w, 1):
+            Sum_bk = Sum_bk + self.img_rgb[self.line_0, j][0] + self.img_rgb[self.line_0, j][1] + self.img_rgb[self.line_0, j][2]
+        Sum_bk = Sum_bk / self.m_img_w
+
+        for p in range(self.line_0, self.line_1, 1):
+            for q in range(0, self.m_img_w, 1):
+                Sum = 0
+                Sum = Sum + self.img_rgb[p, q][0] + self.img_rgb[p, q][1] + self.img_rgb[p, q][2]
+                if abs(Sum - Sum_bk) > 40:
+                    self.img_rgb[p, q] = [0, 0, 0]
+        # self.img_rgb = cv2.resize(self.img_rgb, (int(self.m_img_w / 2), int(self.m_img_h / 2)))
+        # cv2.imshow("win", self.img_rgb)
+        # cv2.waitKey(-1)
+
+
+                    
+
+
+    # 返回两点间距离
+    def calDistance(self, start_, end_):
+        x1 = start_[0]
+        y1 = start_[1]
+        x2 = end_[0]
+        y2 = end_[1]
+        return math.sqrt(pow(abs(x1 - x2), 2) + pow(abs(y1 - y2), 2))
+
 
 
     # 调试接口, **私用**
     def setImage(self, imgname):
         self.img_rgb = cv2.imread(str(imgname))
+    def drawCircle(self, x, y):
+        cv2.circle(self.img_rgb, (x, y), 5, (0, 0, 255), 8)
+    def showImage(self):
+        self.img_rgb = cv2.resize(self.img_rgb, (int(self.m_img_w / 2), int(self.m_img_h / 2)))
+        cv2.imshow("win", self.img_rgb)
+        cv2.waitKey(-1)
     
 
 if __name__ == "__main__":
     obj = WeChatJumpGame()
-    obj.setK(1)
+    
+    # obj.setImage("./result/1/50.png")
+    # [x, y] = obj.findEnd()
+    # obj.drawCircle(x, y)
+    # obj.showImage()
+    
+    obj.setK(1.25)
     obj.Run()
